@@ -138,3 +138,36 @@ def test_wide_spread_pulls_everything():
     resting = [Order(Side.SELL, 163.05, 10, 0.0)]
     out = decide(book(bid=163.00, ask=163.05), fair(), Position(10, 0), resting, 0.0, cfg())
     assert out == [Cancel(resting[0], "спред не равен одному тику")]
+
+
+# --- вырожденный случай: начисление приходит разрывом, а не внутри сессии ------
+
+def flat_fair() -> FairValue:
+    """F(t) без дрейфа внутри сессии: весь рост приходит гэпом между сессиями."""
+    return FairValue(a=PRICE + 0.005, b=0.0)
+
+
+def test_no_intraday_drift_means_no_regime_structure():
+    assert flat_fair().regime_minutes == float("inf")
+
+
+def test_no_drift_does_not_trigger_aggressive_rebuy_on_phase():
+    """Фаза при нулевом дрейфе — шум, торопиться с переходом спреда незачем."""
+    out = places(decide(book(), flat_fair(), Position(0, 0), [], 0.0, cfg()))
+    assert len(out) == 1
+    assert (out[0].side, out[0].price, out[0].aggressive) == (Side.BUY, 163.00, False)
+
+
+def test_no_drift_makes_long_flat_free():
+    """Справедливая цена стоит на месте — простой внутри дня ничего не стоит."""
+    out = places(decide(book(), flat_fair(), Position(0, 0), [], 60.0, cfg(),
+                        flat_since=-99000.0))
+    assert len(out) == 1 and not out[0].aggressive
+
+
+def test_no_drift_still_forces_rebuy_before_close():
+    """Гэп между сессиями достаётся только тому, кто в позиции на закрытии."""
+    now = 1000.0
+    out = places(decide(book(ts=now), flat_fair(), Position(0, 0), [], now,
+                        cfg(session_end_ts=now + 300)))
+    assert len(out) == 1 and out[0].side is Side.BUY and out[0].aggressive

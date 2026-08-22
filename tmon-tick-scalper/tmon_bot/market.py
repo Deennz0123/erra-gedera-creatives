@@ -102,5 +102,9 @@ class FairValue:
 
     @property
     def regime_minutes(self) -> float:
-        """Сколько живёт один ценовой уровень. Оно же — стоимость тика в удержании."""
-        return MINUTES_PER_DAY / self.ticks_per_day
+        """Сколько живёт один ценовой уровень. Оно же — стоимость тика в удержании.
+
+        При нулевом дрейфе внутри сессии уровень не меняется вовсе: бесконечность.
+        """
+        t = self.ticks_per_day
+        return MINUTES_PER_DAY / t if t > 0 else float("inf")

@@ -47,6 +47,11 @@ class PolicyConfig:
     """Потолок времени во флэте. Один тик равен ~248 минутам начисления фонда,
     так что более долгий простой съедает прибыль цикла целиком."""
 
+    min_drift_ticks_per_day: float = 1.0
+    """Ниже этого дрейфа структуры режимов внутри сессии нет, и фаза — шум.
+    Тогда начисление приходит разрывом между сессиями, простой внутри дня ничего
+    не стоит, и выкуп обеспечивает только правило конца сессии."""
+
     session_end_ts: float | None = None
     flatten_before_end_min: float = 15.0
     """К концу сессии слив должен быть выкуплен: ночь и выходные вне позиции
@@ -105,7 +110,10 @@ def decide(
         return intents
 
     # Во флэте: выкупаемся. Пассивно, пока режим молодой и время есть.
-    urgent = phase >= cfg.rebuy_phase or flat_minutes >= cfg.max_flat_minutes
+    # Если дрейфа внутри сессии нет, торопиться некуда: справедливая цена стоит на
+    # месте, флэт бесплатен, и в позицию достаточно вернуться к закрытию.
+    drifts = fair.ticks_per_day >= cfg.min_drift_ticks_per_day
+    urgent = drifts and (phase >= cfg.rebuy_phase or flat_minutes >= cfg.max_flat_minutes)
     if urgent:
         if buy is not None:
             intents.append(Cancel(buy, "переходим к агрессивному выкупу"))
