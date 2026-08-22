@@ -164,3 +164,23 @@ def test_other_network_errors_stay_short(monkeypatch):
     with pytest.raises(SystemExit) as e:
         tc.http_call("MarketDataService/GetOrderBook", {}, "t.x")
     assert "нет связи" in str(e.value) and "Traceback" not in str(e.value)
+
+
+def test_ca_file_is_used_when_present(monkeypatch, tmp_path):
+    """Корень, которого нет в системе, подключается узко — только для этих запросов."""
+    ca = tmp_path / "ca.pem"
+    ca.write_text("-----BEGIN CERTIFICATE-----\n", encoding="utf-8")
+    monkeypatch.setattr(tc, "CA_FILE", ca)
+    seen = {}
+
+    def fake_urlopen(req, timeout=None, context=None):
+        seen["context"] = context
+        raise urllib.error.URLError("остановились после выбора контекста")
+
+    import urllib.error
+    monkeypatch.setattr(tc.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(tc.ssl, "create_default_context",
+                        lambda cafile=None: f"контекст с {cafile}")
+    with pytest.raises(SystemExit):
+        tc.http_call("InstrumentsService/FindInstrument", {}, "t.x")
+    assert seen["context"] == f"контекст с {ca}"

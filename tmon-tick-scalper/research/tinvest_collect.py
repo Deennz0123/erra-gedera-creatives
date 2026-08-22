@@ -29,11 +29,23 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-try:                       # Доверять хранилищу сертификатов ОС, если HTTPS расшифровывает
-    import truststore      # антивирус, VPN или корпоративный прокси. Без пакета — обычная
-    truststore.inject_into_ssl()   # проверка по встроенному списку, чего хватает большинству.
-except Exception:
-    pass
+# Корневой сертификат для проверки соединения.
+#
+# Если рядом с проектом лежит ca.pem — доверяем только ему: это узко и не трогает
+# доверие всей системы. Так подключают корень, которого нет в Windows, — например
+# национальный удостоверяющий центр.
+#
+# Иначе, если установлен truststore, пользуемся хранилищем сертификатов ОС: это нужно
+# там, где HTTPS расшифровывает антивирус или корпоративный прокси.
+CA_FILE = Path(os.environ.get("TINVEST_CA_FILE") or
+               Path(__file__).resolve().parent.parent / "ca.pem")
+
+if not CA_FILE.exists():
+    try:
+        import truststore
+        truststore.inject_into_ssl()
+    except Exception:
+        pass
 
 API = "https://invest-public-api.tinkoff.ru/rest/tinkoff.public.invest.api.contract.v1"
 TICKER = "TMON"
@@ -92,8 +104,9 @@ def http_call(method: str, body: dict, token: str) -> dict:
                  "Content-Type": "application/json",
                  "accept": "application/json"},
     )
+    ctx = ssl.create_default_context(cafile=str(CA_FILE)) if CA_FILE.exists() else None
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=30, context=ctx) as r:
             return json.load(r)
     except urllib.error.HTTPError as e:
         detail = e.read().decode(errors="replace")[:400]
@@ -103,9 +116,10 @@ def http_call(method: str, body: dict, token: str) -> dict:
             raise SystemExit(
                 "TLS-соединение отклонено: сертификат подписан не публичным центром.\n"
                 "Так бывает, когда трафик расшифровывает антивирус, VPN или прокси.\n"
-                "Лечится тем, что Python начинает доверять хранилищу сертификатов системы:\n"
-                "    py -m pip install truststore\n"
-                "После установки запустите команду снова."
+                "Если сертификат подписан удостоверяющим центром, которого нет в системе,\n"
+                f"положите его корень в {CA_FILE} — доверие будет только к нему.\n"
+                "Если HTTPS расшифровывает антивирус или прокси, поможет:\n"
+                "    py -m pip install truststore"
             ) from None
         raise SystemExit(f"{method}: нет связи — {e.reason}") from None
 
