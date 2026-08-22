@@ -34,12 +34,37 @@
 
 Нужен Python 3.10 или новее. Ставить ничего не требуется — только стандартная библиотека.
 
+**Если папку прислали архивом** — распаковать, и всё, шаг выполнен. Клонировать не нужно.
+
+Иначе, Linux и macOS:
+
 ```bash
 git clone -b claude/tmon-tick-trading-automation-ur95a1 \
   https://github.com/Deennz0123/erra-gedera-creatives.git
 cd erra-gedera-creatives/tmon-tick-scalper
-export TINVEST_TOKEN='ваш_токен'
 ```
+
+Windows, PowerShell — то же самое, но перенос строки обозначается обратным апострофом,
+а не обратным слешем:
+
+```powershell
+git clone -b claude/tmon-tick-trading-automation-ur95a1 `
+  https://github.com/Deennz0123/erra-gedera-creatives.git
+cd erra-gedera-creatives\tmon-tick-scalper
+```
+
+Токен через `export` задавать не нужно ни на одной системе: скрипты читают файл `.env`,
+он создаётся на следующем шаге. `export` — команда Linux и macOS, в PowerShell её нет.
+
+### Проверить Python
+
+```bash
+python3 --version     # Linux, macOS
+python --version      # Windows
+```
+
+Нужна версия **3.10 или новее**. Дальше в примерах пишется `python3` — в Windows
+подставляйте `python`.
 
 ### Если работаете в VS Code
 
@@ -61,7 +86,21 @@ code erra-gedera-creatives/tmon-tick-scalper
   **`.env` в git не попадает**, это проверено правилом в `.gitignore`.
 
 **Как создать `.env`:** в панели Explorer слева нажать иконку «новый файл», назвать
-файл ровно `.env` (с точкой в начале, без расширения) и вписать одну строку:
+файл ровно `.env` (с точкой в начале, без расширения) и вписать одну строку.
+
+Через терминал то же самое — в PowerShell:
+
+```powershell
+Set-Content -Path .env -Value 'TINVEST_TOKEN=ваш_токен'
+```
+
+В bash:
+
+```bash
+echo 'TINVEST_TOKEN=ваш_токен' > .env
+```
+
+Содержимое файла — ровно одна строка:
 
 ```
 TINVEST_TOKEN=ваш_токен
