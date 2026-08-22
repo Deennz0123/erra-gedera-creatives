@@ -105,7 +105,7 @@ def _load(path):
 
 
 def _levels(books):
-    """Режет историю на периоды жизни лучшего бида: (bid, ts_open, ts_close, qty_at_open)."""
+    """Режет историю на режимы: периоды, пока лучший бид стоит на одном уровне."""
     out = []
     for rec in books:
         if out and abs(out[-1]["bid"] - rec["bid"]) < TICK / 2:
@@ -116,62 +116,109 @@ def _levels(books):
     return out
 
 
-def analyze(path):
+def _fit_fair(levels):
+    """F(t) = a + b*t по точкам смены уровня: в момент сдвига F совпадает с новым бидом.
+
+    Возвращает (a, b) или None, если сдвигов слишком мало для прямой.
+    """
+    pts = [(lvl["ts_open"], lvl["bid"]) for lvl in levels[1:]]   # первый режим обрезан началом сбора
+    if len(pts) < 2:
+        return None
+    n = len(pts)
+    mx = sum(x for x, _ in pts) / n
+    my = sum(y for _, y in pts) / n
+    var = sum((x - mx) ** 2 for x, _ in pts)
+    if var == 0:
+        return None
+    b = sum((x - mx) * (y - my) for x, y in pts) / var
+    return my - b * mx, b
+
+
+def _phase_hist(vals, bins=5):
+    """Гистограмма по фазе режима: 0 — начало, 1 — конец."""
+    h = [0] * bins
+    for v in vals:
+        h[min(int(v * bins), bins - 1)] += 1
+    return h
+
+
+def analyze(path, size):
     books, trades = _load(path)
     if not books:
         sys.exit(f"{path}: нет снапшотов стакана")
 
     span_h = (books[-1]["ts"] - books[0]["ts"]) / 3600
     span_days = max(span_h / 8.5, 1e-9)                   # 8,5 торговых часов в дне
+    levels = _levels(books)
 
-    # 1. спред
+    # --- спред
     spreads = defaultdict(int)
     for rec in books:
         spreads[round((rec["ask"] - rec["bid"]) / TICK)] += 1
     total = sum(spreads.values())
 
-    # 2. уровни лучшего бида и оборачиваемость очереди на каждом
-    levels = _levels(books)
-    turnovers, lifetimes = [], []
-    for lvl in levels:
-        executed = sum(tr["qty"] for tr in trades
-                       if lvl["ts_open"] <= tr["ts"] <= lvl["ts_close"]
-                       and abs(tr["price"] - lvl["bid"]) < TICK / 2)
-        if lvl["qty_open"]:
-            turnovers.append(executed / lvl["qty_open"])
-        lifetimes.append(lvl["ts_close"] - lvl["ts_open"])
-
-    # 3. циклов в день: цикл требует исполнения и по биду, и по офферу
-    full_turns = [t for t in turnovers if t >= 1.0]
-    cycles_per_day = len(full_turns) / span_days
-
-    print(f"окно наблюдения: {span_h:.2f} ч ({span_days:.2f} торговых дня), "
+    print(f"окно: {span_h:.2f} ч ({span_days:.2f} торговых дня), "
           f"снапшотов {len(books)}, сделок {len(trades)}")
     print("\nспред, тиков:")
-    for ticks in sorted(spreads):
-        print(f"  {ticks:>3} — {100 * spreads[ticks] / total:5.1f}% времени")
+    for t in sorted(spreads):
+        print(f"  {t:>3} — {100 * spreads[t] / total:5.1f}% времени")
 
-    print(f"\nсмен уровня лучшего бида: {len(levels)} "
-          f"({len(levels) / span_days:.1f} в день, ожидалось ~{PRICE * RATE / 365 / TICK:.1f})")
+    # --- режимы
+    lifetimes = [l["ts_close"] - l["ts_open"] for l in levels[1:-1]]
+    expected = TICK / (PRICE * RATE / 365 / 1440)          # минут на копейку начисления
+    print(f"\nсмен уровня: {len(levels) - 1} ({(len(levels) - 1) / span_days:.1f} за сессию, "
+          f"модель даёт ~{8.5 * 60 / expected:.1f})")
     if lifetimes:
-        print(f"медианное время жизни уровня: {sorted(lifetimes)[len(lifetimes) // 2] / 60:.1f} мин")
-    if turnovers:
-        srt = sorted(turnovers)
-        print(f"оборачиваемость очереди на биде: медиана {srt[len(srt) // 2]:.2f}, "
-              f"максимум {srt[-1]:.2f}")
-        print(f"  уровней, где очередь выбрана целиком: {len(full_turns)} из {len(turnovers)}")
+        med = sorted(lifetimes)[len(lifetimes) // 2] / 60
+        print(f"длина режима: медиана {med:.0f} мин (модель даёт {expected:.0f} мин)")
 
-    # 4. перевод в экономику из FEASIBILITY.md
-    per_cycle = TICK * TRADING_DAYS / PRICE * 100         # % годовых за 1 цикл в день
-    per_flat_h = PRICE * RATE / 365 / 1440 * 60 * TRADING_DAYS / PRICE * 100
-    flat_h = 8.5 / 2                                      # допущение: половина сессии вне позиции
-    print(f"\nоценка: {cycles_per_day:.1f} циклов в день")
-    print(f"  +{cycles_per_day * per_cycle:.2f}% годовых за исполнения")
-    print(f"  -{flat_h * per_flat_h:.2f}% годовых за {flat_h:.1f} ч/день вне позиции")
-    print(f"  = {cycles_per_day * per_cycle - flat_h * per_flat_h:+.2f}% годовых "
-          f"к «купил и держу»")
-    print(f"\nпорог: нужно > {flat_h * per_flat_h / per_cycle:.1f} циклов в день, иначе "
-          f"выгоднее просто держать фонд")
+    fair = _fit_fair(levels)
+    if not fair:
+        sys.exit("\nсмен уровня меньше двух — F(t) не восстановить, нужен более длинный сбор")
+    a, b = fair
+    print(f"F(t) восстановлена: дрейф {b * 86400 / TICK:.1f} тика в сутки "
+          f"(модель даёт {PRICE * RATE / 365 / TICK:.1f})")
+
+    # --- пул уступок и отбор исполнений по фазе режима
+    book_at = {r["ts"]: r for r in books}
+    ts_sorted = sorted(book_at)
+    pool = 0.0
+    at_bid, at_ask = [], []
+    for tr in trades:
+        i = min(range(len(ts_sorted)), key=lambda k: abs(ts_sorted[k] - tr["ts"]))
+        bk = book_at[ts_sorted[i]]
+        f = a + b * tr["ts"]
+        phase = max(0.0, min(0.999, (f - bk["bid"]) / TICK))
+        if abs(tr["price"] - bk["ask"]) < TICK / 2:
+            pool += (bk["ask"] - f) * tr["qty"]
+            at_ask.append(phase)
+        elif abs(tr["price"] - bk["bid"]) < TICK / 2:
+            pool += (f - bk["bid"]) * tr["qty"]
+            at_bid.append(phase)
+
+    print("\nисполнения по фазе режима (0 — начало, 1 — конец):")
+    for name, vals in (("по офферу", at_ask), ("по биду  ", at_bid)):
+        if vals:
+            h = _phase_hist(vals)
+            bars = " ".join(f"{100 * c / max(sum(h), 1):4.0f}%" for c in h)
+            print(f"  {name}: {bars}   всего {len(vals)}")
+    print("  ожидание из модели: по офферу сдвиг вправо, по биду — влево (отбор против вас)")
+
+    # --- доля пула и перевод в % годовых
+    pool_day = pool / span_days
+    depth = sorted(r["bid_qty"] for r in books)[len(books) // 2] or 1
+    share = min(1.0, size / depth)
+    capital = size * PRICE
+    print(f"\nпул уступок: {pool_day:,.0f} ₽ в день на весь рынок".replace(",", " "))
+    print(f"медианная глубина лучшего бида: {depth:,.0f} бумаг".replace(",", " "))
+    print(f"ваш размер {size} бумаг → доля очереди {100 * share:.2f}%")
+    print(f"расчётный заработок: {pool_day * share:,.0f} ₽ в день".replace(",", " ")
+          + f" на капитал {capital:,.0f} ₽".replace(",", " "))
+    print(f"  = {pool_day * share * TRADING_DAYS / capital * 100:+.2f}% годовых "
+          f"сверх доходности фонда")
+    print("  ВЕРХНЯЯ ОЦЕНКА: доля считается пропорционально размеру и игнорирует позицию")
+    print("  в очереди. Реальный захват ниже — насколько, показывает только живой пилот.")
+    print("\nкритерий этапа 1: меньше ~0,5% годовых → выгоднее просто держать фонд")
 
 
 def main():
@@ -186,12 +233,14 @@ def main():
 
     a = sub.add_parser("analyze", help="посчитать метрики очереди по JSONL")
     a.add_argument("path")
+    a.add_argument("--size", type=int, default=6000,
+                   help="размер вашей заявки в бумагах")
 
     args = ap.parse_args()
     if args.cmd == "collect":
         collect(args.path, args.seconds, args.interval)
     else:
-        analyze(args.path)
+        analyze(args.path, args.size)
 
 
 if __name__ == "__main__":
