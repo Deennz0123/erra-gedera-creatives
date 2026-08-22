@@ -99,3 +99,29 @@ def test_watch_line_reports_spread_and_sides():
                           "ask_qty": 38900, "ts": 1_755_000_000.0}, fresh)
     assert "163.02 / 163.03" in line and "1 тик" in line
     assert "1200 бумаг" in line and "(1 по офферу, 1 по биду)" in line
+
+
+# --- поиск токена ---------------------------------------------------------------
+
+def test_token_comes_from_environment(monkeypatch):
+    monkeypatch.setenv("TINVEST_TOKEN", "  t.from-env  ")
+    assert tc.load_token() == "t.from-env"
+
+
+def test_token_falls_back_to_dotenv(monkeypatch, tmp_path):
+    """Запуск из терминала без export должен работать так же, как из VS Code."""
+    monkeypatch.delenv("TINVEST_TOKEN", raising=False)
+    project = tmp_path / "tmon-tick-scalper"
+    (project / "research").mkdir(parents=True)
+    (project / ".env").write_text(
+        '# комментарий\nTINVEST_TOKEN="t.from-file"\nДРУГОЕ=1\n', encoding="utf-8")
+    monkeypatch.setattr(tc, "__file__", str(project / "research" / "tinvest_collect.py"))
+    assert tc.load_token() == "t.from-file"
+
+
+def test_missing_token_explains_what_to_create(monkeypatch, tmp_path):
+    monkeypatch.delenv("TINVEST_TOKEN", raising=False)
+    monkeypatch.setattr(tc, "__file__", str(tmp_path / "research" / "tinvest_collect.py"))
+    with pytest.raises(SystemExit) as e:
+        tc.load_token()
+    assert "TINVEST_TOKEN=" in str(e.value) and ".env" in str(e.value)

@@ -24,6 +24,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
@@ -31,6 +32,33 @@ API = "https://invest-public-api.tinkoff.ru/rest/tinkoff.public.invest.api.contr
 TICKER = "TMON"
 TICK = 0.01
 MSK = timezone(timedelta(hours=3))
+
+
+def load_token() -> str:
+    """Токен из переменной окружения, иначе из .env рядом с проектом.
+
+    Так одинаково работают и запуск из VS Code (там .env подхватывает launch.json),
+    и запуск из терминала без export.
+    """
+    token = os.environ.get("TINVEST_TOKEN", "").strip()
+    if token:
+        return token
+
+    env = Path(__file__).resolve().parent.parent / ".env"
+    if env.exists():
+        for line in env.read_text(encoding="utf-8").splitlines():
+            key, sep, value = line.strip().partition("=")
+            if sep and key.strip() == "TINVEST_TOKEN":
+                token = value.strip().strip('"').strip("'")
+                if token:
+                    return token
+
+    raise SystemExit(
+        "Токен не найден.\n"
+        f"Создайте файл {env}\n"
+        "и впишите в него одну строку без кавычек и пробелов вокруг знака равенства:\n"
+        "    TINVEST_TOKEN=ваш_токен"
+    )
 
 
 def http_call(method: str, body: dict, token: str) -> dict:
@@ -202,9 +230,7 @@ def main() -> None:
     c.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
 
-    token = os.environ.get("TINVEST_TOKEN", "").strip()
-    if not token:
-        raise SystemExit("нет TINVEST_TOKEN в переменных окружения")
+    token = load_token()
 
     uid, name = resolve_uid(token)
     print(f"{TICKER} — {name}\ninstrument_uid: {uid}\n", file=sys.stderr)
