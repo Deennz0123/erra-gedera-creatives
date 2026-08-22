@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import ssl
 import sys
 import time
 import urllib.error
@@ -27,6 +28,12 @@ import urllib.request
 from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+
+try:                       # Доверять хранилищу сертификатов ОС, если HTTPS расшифровывает
+    import truststore      # антивирус, VPN или корпоративный прокси. Без пакета — обычная
+    truststore.inject_into_ssl()   # проверка по встроенному списку, чего хватает большинству.
+except Exception:
+    pass
 
 API = "https://invest-public-api.tinkoff.ru/rest/tinkoff.public.invest.api.contract.v1"
 TICKER = "TMON"
@@ -91,6 +98,16 @@ def http_call(method: str, body: dict, token: str) -> dict:
     except urllib.error.HTTPError as e:
         detail = e.read().decode(errors="replace")[:400]
         raise SystemExit(f"{method}: HTTP {e.code}\n{detail}") from None
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, ssl.SSLCertVerificationError):
+            raise SystemExit(
+                "TLS-соединение отклонено: сертификат подписан не публичным центром.\n"
+                "Так бывает, когда трафик расшифровывает антивирус, VPN или прокси.\n"
+                "Лечится тем, что Python начинает доверять хранилищу сертификатов системы:\n"
+                "    py -m pip install truststore\n"
+                "После установки запустите команду снова."
+            ) from None
+        raise SystemExit(f"{method}: нет связи — {e.reason}") from None
 
 
 CALL = http_call

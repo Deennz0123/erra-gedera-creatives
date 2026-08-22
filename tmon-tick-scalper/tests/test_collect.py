@@ -136,3 +136,31 @@ def test_dotenv_read_in_any_powershell_encoding(monkeypatch, tmp_path, encoding)
     (project / ".env").write_bytes("TINVEST_TOKEN=t.abc\n".encode(encoding))
     monkeypatch.setattr(tc, "__file__", str(project / "research" / "tinvest_collect.py"))
     assert tc.load_token() == "t.abc"
+
+
+# --- сеть ------------------------------------------------------------------------
+
+def test_tls_interception_explains_the_fix(monkeypatch):
+    """Антивирус или прокси, расшифровывающий HTTPS, — частый случай на Windows."""
+    import ssl
+    import urllib.error
+
+    def boom(*a, **kw):
+        raise urllib.error.URLError(ssl.SSLCertVerificationError("self-signed certificate"))
+
+    monkeypatch.setattr(tc.urllib.request, "urlopen", boom)
+    with pytest.raises(SystemExit) as e:
+        tc.http_call("InstrumentsService/FindInstrument", {}, "t.x")
+    assert "truststore" in str(e.value)
+
+
+def test_other_network_errors_stay_short(monkeypatch):
+    import urllib.error
+
+    def boom(*a, **kw):
+        raise urllib.error.URLError("нет маршрута")
+
+    monkeypatch.setattr(tc.urllib.request, "urlopen", boom)
+    with pytest.raises(SystemExit) as e:
+        tc.http_call("MarketDataService/GetOrderBook", {}, "t.x")
+    assert "нет связи" in str(e.value) and "Traceback" not in str(e.value)
