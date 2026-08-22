@@ -26,8 +26,9 @@ def trade(nano: int, direction: str, qty: str, at: str) -> dict:
 def fake_api(book=BOOK, trades=()):
     def call(method, body, token):
         if method.endswith("FindInstrument"):
-            return {"instruments": [{"ticker": "TMOS", "uid": "wrong", "name": "Другой"},
-                                    {"ticker": "TMON", "uid": "uid-tmon", "name": "Денежный рынок"}]}
+            return {"instruments": [{"ticker": "TMOS@", "uid": "wrong", "name": "Другой"},
+                                    {"ticker": "TMON@", "uid": "uid-tmon",
+                                     "classCode": "TQTF", "name": "Денежный рынок"}]}
         if method.endswith("GetOrderBook"):
             return book
         if method.endswith("GetLastTrades"):
@@ -50,9 +51,19 @@ def test_quotation_converts_to_roubles():
     assert tc.money(None) is None
 
 
-def test_resolve_uid_matches_ticker_exactly():
-    """По тикеру в проде работать нельзя — сборщик обязан вернуть uid."""
+def test_resolve_uid_accepts_the_at_suffix():
+    """В T-Invest тикер пишется как TMON@ — сравнение должно это переживать."""
     assert tc.resolve_uid("t") == ("uid-tmon", "Денежный рынок")
+
+
+def test_resolve_uid_prefers_moscow_board(monkeypatch):
+    """Одна бумага возвращается несколькими режимами торгов — берём основной."""
+    def call(method, body, token):
+        return {"instruments": [
+            {"ticker": "TMON@", "classCode": "SPBRU", "uid": "spb", "name": "Денежный рынок"},
+            {"ticker": "TMON@", "classCode": "TQTF", "uid": "moex", "name": "Денежный рынок"}]}
+    monkeypatch.setattr(tc, "CALL", call)
+    assert tc.resolve_uid("t")[0] == "moex"
 
 
 def test_step_writes_book_record_in_analyzer_schema(monkeypatch):

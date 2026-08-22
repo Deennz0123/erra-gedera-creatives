@@ -135,13 +135,27 @@ def money(q: dict | None) -> float | None:
 
 
 def resolve_uid(token: str) -> tuple[str, str]:
-    """Ищет TMON по тикеру. Работать в проде по тикеру нельзя — нужен uid."""
+    """Ищет TMON и возвращает uid: работать в проде по тикеру нельзя.
+
+    Тикер в T-Invest пишется с решёткой на конце — TMON@. Одна бумага может
+    вернуться несколькими записями с разными режимами торгов, поэтому при наличии
+    выбора берём основной режим Московской биржи.
+    """
     found = CALL("InstrumentsService/FindInstrument",
                  {"query": TICKER, "apiTradeAvailableFlag": True}, token)
-    for item in found.get("instruments", []):
-        if item.get("ticker") == TICKER:
-            return item["uid"], item.get("name", "")
-    raise SystemExit(f"{TICKER} не найден. Ответ: {json.dumps(found)[:400]}")
+    matches = [i for i in found.get("instruments", [])
+               if i.get("ticker", "").rstrip("@") == TICKER]
+    if not matches:
+        raise SystemExit(f"{TICKER} не найден. Ответ: "
+                         f"{json.dumps(found, ensure_ascii=False)[:400]}")
+
+    for m in matches:
+        print(f"  {m.get('ticker'):<6} режим {m.get('classCode'):<8} uid {m.get('uid')}",
+              file=sys.stderr)
+    best = next((m for m in matches if m.get("classCode") == "TQTF"), matches[0])
+    if len(matches) > 1:
+        print(f"  выбран режим {best.get('classCode')}", file=sys.stderr)
+    return best["uid"], best.get("name", "")
 
 
 def show_schedule(token: str, uid: str) -> None:

@@ -153,6 +153,36 @@ instrument_uid: 0000-0000-...
 Против живого API он не проверялся: из среды разработки нет доступа даже к документации,
 поэтому имена полей REST-обёртки могли разойтись. Правится за один заход.
 
+### Известные параметры инструмента
+
+Получены через API 23.08.2026:
+
+```
+тикер   TMON@        (с решёткой на конце, без неё поиск не находит)
+uid     498ec3ff-ef27-4729-9703-a5aac48d5789
+figi    TCS70A106DL2
+isin    RU000A106DL2
+```
+
+### Если Windows не доверяет сертификату
+
+API Т-Банка использует сертификат удостоверяющего центра Минцифры, которого в Windows
+нет. Признак — `CERTIFICATE_VERIFY_FAILED` при запуске. Лечится файлом `ca.pem` рядом с
+проектом: скрипт доверяет только ему и не трогает системное хранилище. Корень берётся
+на [gosuslugi.ru/crt](https://www.gosuslugi.ru/crt) либо снимается с самого сервера:
+
+```powershell
+$t=New-Object Net.Sockets.TcpClient("invest-public-api.tinkoff.ru",443); $s=New-Object Net.Security.SslStream($t.GetStream(),$false,{$true}); $s.AuthenticateAsClient("invest-public-api.tinkoff.ru"); $leaf=New-Object Security.Cryptography.X509Certificates.X509Certificate2($s.RemoteCertificate); $t.Close(); $ch=New-Object Security.Cryptography.X509Certificates.X509Chain; $ch.ChainPolicy.RevocationMode="NoCheck"; $null=$ch.Build($leaf); $pem=@(); foreach($e in $ch.ChainElements){ if($e.Certificate.Thumbprint -ne $leaf.Thumbprint){ $pem+="-----BEGIN CERTIFICATE-----"; $pem+=[Convert]::ToBase64String($e.Certificate.RawData,'InsertLineBreaks'); $pem+="-----END CERTIFICATE-----" } }; Set-Content ca.pem ($pem -join "`n") -Encoding ascii
+```
+
+### Токен показывается один раз
+
+При выпуске токен отображается единственный раз и позже недоступен. Копировать надо
+кнопкой копирования, а не выделением: выделение может захватить обрезанный текст.
+Признак негодного токена — `HTTP 401`, `Authentication token is missing or invalid`.
+Проверить его отдельно от кода можно в [инструменте на портале
+разработчика](https://developer.tbank.ru/invest/intro/developer/protocols/restapi).
+
 ## Шаг 4. Посмотреть вживую
 
 ```bash
