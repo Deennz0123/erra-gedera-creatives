@@ -6,35 +6,59 @@
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/research/tinvest_collect.py",
-      "args": ["schedule"],
+      "args": [
+        "schedule"
+      ],
       "envFile": "${workspaceFolder}/.env",
-      "console": "integratedTerminal"
+      "console": "integratedTerminal",
+      "windows": {
+        "python": "py"
+      }
     },
     {
       "name": "TMON: смотреть вживую",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/research/tinvest_collect.py",
-      "args": ["watch"],
+      "args": [
+        "watch"
+      ],
       "envFile": "${workspaceFolder}/.env",
-      "console": "integratedTerminal"
+      "console": "integratedTerminal",
+      "windows": {
+        "python": "py"
+      }
     },
     {
       "name": "TMON: сбор в файл",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/research/tinvest_collect.py",
-      "args": ["collect", "data/tmon.jsonl"],
+      "args": [
+        "collect",
+        "data/tmon.jsonl"
+      ],
       "envFile": "${workspaceFolder}/.env",
-      "console": "integratedTerminal"
+      "console": "integratedTerminal",
+      "windows": {
+        "python": "py"
+      }
     },
     {
       "name": "TMON: анализ собранного",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/research/queue_probe.py",
-      "args": ["analyze", "data/tmon.jsonl", "--size", "6000"],
-      "console": "integratedTerminal"
+      "args": [
+        "analyze",
+        "data/tmon.jsonl",
+        "--size",
+        "6000"
+      ],
+      "console": "integratedTerminal",
+      "windows": {
+        "python": "py"
+      }
     }
   ]
 }

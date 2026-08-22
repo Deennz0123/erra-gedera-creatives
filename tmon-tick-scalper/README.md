@@ -60,11 +60,26 @@ cd erra-gedera-creatives\tmon-tick-scalper
 
 ```bash
 python3 --version     # Linux, macOS
-python --version      # Windows
+py --version          # Windows
 ```
 
 Нужна версия **3.10 или новее**. Дальше в примерах пишется `python3` — в Windows
-подставляйте `python`.
+подставляйте `py`.
+
+> **Почему `py`, а не `python`.** Windows по умолчанию ставит заглушку Microsoft Store,
+> которая перехватывает команду `python` и ничего не делает: `python --version` печатает
+> голое слово «Python» без номера. Проверить можно так:
+>
+> ```powershell
+> Get-Command python | Format-List Name, Source, Version
+> ```
+>
+> Если в `Source` путь через `WindowsApps`, а `Version` равна `0.0.0.0` — это заглушка.
+> Лаунчер `py` идёт с настоящим Python и работает в обход неё. Убрать заглушку совсем:
+> Параметры → Приложения → Дополнительные параметры приложения → Псевдонимы выполнения
+> приложения → выключить `python.exe` и `python3.exe`.
+>
+> Запуски в `.vscode/launch.json` на Windows уже используют `py`.
 
 ### Если работаете в VS Code
 
