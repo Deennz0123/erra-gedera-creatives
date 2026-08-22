@@ -229,6 +229,7 @@ def analyze(path, size):
     ts_sorted = sorted(book_at)
     pool = 0.0
     at_bid, at_ask = [], []
+    seq = []
     for tr in trades:
         i = min(range(len(ts_sorted)), key=lambda k: abs(ts_sorted[k] - tr["ts"]))
         bk = book_at[ts_sorted[i]]
@@ -237,9 +238,20 @@ def analyze(path, size):
         if abs(tr["price"] - bk["ask"]) < TICK / 2:
             pool += (bk["ask"] - f) * tr["qty"]
             at_ask.append(phase)
+            seq.append("A")
         elif abs(tr["price"] - bk["bid"]) < TICK / 2:
             pool += (f - bk["bid"]) * tr["qty"]
             at_bid.append(phase)
+            seq.append("B")
+
+    # --- потолок циклов: колебания печатей между бидом и оффером
+    flips = sum(1 for a, b in zip(seq, seq[1:]) if a != b)
+    ceiling = flips / 2 / span_days          # полный цикл — два перехода
+    print(f"\nколебаний между бидом и оффером: {flips} ({flips / span_days:.0f} за сессию)")
+    print(f"потолок циклов: {ceiling:.0f} в день = {ceiling * TICK * TRADING_DAYS / PRICE * 100:.1f}% "
+          f"годовых, если бы исполнялась каждая заявка")
+    print("  это ВЕРХНЯЯ ГРАНИЦА и она недостижима: каждое колебание — сделка с тем,")
+    print("  кто стоял в очереди первым. Ваша доля считается ниже.")
 
     print("\nисполнения по фазе режима (0 — начало, 1 — конец):")
     for name, vals in (("по офферу", at_ask), ("по биду  ", at_bid)):
