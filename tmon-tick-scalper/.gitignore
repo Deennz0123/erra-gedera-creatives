@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.jsonl
+*.jsonl.gz
+.env
+data/
+collect.log

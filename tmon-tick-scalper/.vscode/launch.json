@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "TMON: расписание торгов",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/research/tinvest_collect.py",
+      "args": ["schedule"],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "TMON: смотреть вживую",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/research/tinvest_collect.py",
+      "args": ["watch"],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "TMON: сбор в файл",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/research/tinvest_collect.py",
+      "args": ["collect", "data/tmon.jsonl"],
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "TMON: анализ собранного",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/research/queue_probe.py",
+      "args": ["analyze", "data/tmon.jsonl", "--size", "6000"],
+      "console": "integratedTerminal"
+    }
+  ]
+}
