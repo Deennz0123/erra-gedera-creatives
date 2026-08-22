@@ -142,6 +142,34 @@ def _phase_hist(vals, bins=5):
     return h
 
 
+def _sessions(books, gap=3600):
+    """Режет снапшоты на торговые сессии по разрывам во времени."""
+    out = [[books[0]]]
+    for prev, cur in zip(books, books[1:]):
+        if cur["ts"] - prev["ts"] >= gap:
+            out.append([])
+        out[-1].append(cur)
+    return out
+
+
+def carry_check(books):
+    """Решающий тест для стратегии бесплатного внутридневного плеча.
+
+    Начисление фонда идёт круглосуточно. Вопрос в том, где оно проявляется в
+    биржевой цене: равномерно внутри сессии или разрывом между сессиями. Плечо,
+    закрываемое к вечеру, забирает только первую часть.
+    """
+    sess = _sessions(books)
+    if len(sess) < 2:
+        return None
+    intraday = sum((s[-1]["bid"] - s[0]["bid"]) for s in sess)
+    gaps = sum(b[0]["bid"] - a[-1]["bid"] for a, b in zip(sess, sess[1:]))
+    total = intraday + gaps
+    return {"sessions": len(sess), "intraday": intraday, "gaps": gaps,
+            "share": intraday / total if total else 0.0,
+            "hours": sum(s[-1]["ts"] - s[0]["ts"] for s in sess) / 3600 / len(sess)}
+
+
 def analyze(path, size):
     books, trades = _load(path)
     if not books:
@@ -178,6 +206,23 @@ def analyze(path, size):
     a, b = fair
     print(f"F(t) восстановлена: дрейф {b * 86400 / TICK:.1f} тика в сутки "
           f"(модель даёт {PRICE * RATE / 365 / TICK:.1f})")
+
+    # --- внутридневной дрейф против ночного разрыва
+    cc = carry_check(books)
+    if cc is None:
+        print("\nтест на внутридневной дрейф: нужен сбор минимум за две сессии")
+    else:
+        print(f"\nвнутридневной дрейф против ночного разрыва ({cc['sessions']} сессии "
+              f"по {cc['hours']:.1f} ч):")
+        print(f"  внутри сессий: {cc['intraday'] / TICK:+.1f} тика")
+        print(f"  между сессиями: {cc['gaps'] / TICK:+.1f} тика")
+        print(f"  доля начисления внутри сессии: {100 * cc['share']:.0f}%")
+        carry = cc["share"] * RATE * 100
+        print(f"  → бесплатное плечо, закрываемое к вечеру, приносит {carry:.1f}% годовых")
+        print(f"    на заёмную сумму до стоимости входа-выхода (1 тик/день = 1,53% годовых)")
+        if cc["share"] < 0.15:
+            print("    ВНИМАНИЕ: начисление приходит разрывом, а не внутри сессии.")
+            print("    Стратегия внутридневного плеча в этом случае не работает.")
 
     # --- пул уступок и отбор исполнений по фазе режима
     book_at = {r["ts"]: r for r in books}
