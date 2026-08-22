@@ -98,7 +98,7 @@ def load_token() -> str:
 def http_call(method: str, body: dict, token: str) -> dict:
     """POST в REST-обёртку gRPC-API. Подменяется в тестах."""
     req = urllib.request.Request(
-        f"{API}/{method}",
+        f"{API}.{method}",
         data=json.dumps(body).encode(),
         headers={"Authorization": f"Bearer {token}",
                  "Content-Type": "application/json",
@@ -110,7 +110,7 @@ def http_call(method: str, body: dict, token: str) -> dict:
             return json.load(r)
     except urllib.error.HTTPError as e:
         detail = e.read().decode(errors="replace")[:400]
-        raise SystemExit(f"{method}: HTTP {e.code}\n{detail}") from None
+        raise SystemExit(f"{method}: HTTP {e.code}\n{API}.{method}\n{detail}") from None
     except urllib.error.URLError as e:
         if isinstance(e.reason, ssl.SSLCertVerificationError):
             raise SystemExit(
