@@ -34,6 +34,21 @@ TICK = 0.01
 MSK = timezone(timedelta(hours=3))
 
 
+def _read_text(path: Path) -> str:
+    """Читает .env, не полагаясь на кодировку.
+
+    Разные версии PowerShell сохраняют файл то в UTF-8, то в UTF-16, то в кодировке
+    системы, и Set-Content по умолчанию ведёт себя по-разному в 5.1 и в 7.
+    """
+    raw = path.read_bytes()
+    if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return raw.decode("utf-16")
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("cp1251", errors="replace")
+
+
 def load_token() -> str:
     """Токен из переменной окружения, иначе из .env рядом с проектом.
 
@@ -46,7 +61,7 @@ def load_token() -> str:
 
     env = Path(__file__).resolve().parent.parent / ".env"
     if env.exists():
-        for line in env.read_text(encoding="utf-8").splitlines():
+        for line in _read_text(env).splitlines():
             key, sep, value = line.strip().partition("=")
             if sep and key.strip() == "TINVEST_TOKEN":
                 token = value.strip().strip('"').strip("'")

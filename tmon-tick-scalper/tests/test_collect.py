@@ -125,3 +125,14 @@ def test_missing_token_explains_what_to_create(monkeypatch, tmp_path):
     with pytest.raises(SystemExit) as e:
         tc.load_token()
     assert "TINVEST_TOKEN=" in str(e.value) and ".env" in str(e.value)
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "utf-8-sig", "utf-16", "cp1251"])
+def test_dotenv_read_in_any_powershell_encoding(monkeypatch, tmp_path, encoding):
+    """PowerShell 5.1 и 7 сохраняют файл по-разному — токен должен читаться из любого."""
+    monkeypatch.delenv("TINVEST_TOKEN", raising=False)
+    project = tmp_path / encoding
+    (project / "research").mkdir(parents=True)
+    (project / ".env").write_bytes("TINVEST_TOKEN=t.abc\n".encode(encoding))
+    monkeypatch.setattr(tc, "__file__", str(project / "research" / "tinvest_collect.py"))
+    assert tc.load_token() == "t.abc"
