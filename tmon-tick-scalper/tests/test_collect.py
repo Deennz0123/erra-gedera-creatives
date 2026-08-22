@@ -53,7 +53,8 @@ def test_quotation_converts_to_roubles():
 
 def test_resolve_uid_accepts_the_at_suffix():
     """В T-Invest тикер пишется как TMON@ — сравнение должно это переживать."""
-    assert tc.resolve_uid("t") == ("uid-tmon", "Денежный рынок")
+    inst = tc.resolve_instrument("t")
+    assert (inst["uid"], inst["name"]) == ("uid-tmon", "Денежный рынок")
 
 
 def test_resolve_uid_prefers_moscow_board(monkeypatch):
@@ -63,7 +64,7 @@ def test_resolve_uid_prefers_moscow_board(monkeypatch):
             {"ticker": "TMON@", "classCode": "SPBRU", "uid": "spb", "name": "Денежный рынок"},
             {"ticker": "TMON@", "classCode": "TQTF", "uid": "moex", "name": "Денежный рынок"}]}
     monkeypatch.setattr(tc, "CALL", call)
-    assert tc.resolve_uid("t")[0] == "moex"
+    assert tc.resolve_instrument("t")["uid"] == "moex"
 
 
 def test_step_writes_book_record_in_analyzer_schema(monkeypatch):

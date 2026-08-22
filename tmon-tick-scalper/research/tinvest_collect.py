@@ -134,7 +134,7 @@ def money(q: dict | None) -> float | None:
     return int(q.get("units", 0)) + int(q.get("nano", 0)) / 1e9
 
 
-def resolve_uid(token: str) -> tuple[str, str]:
+def resolve_instrument(token: str) -> dict:
     """Ищет TMON и возвращает uid: работать в проде по тикеру нельзя.
 
     Тикер в T-Invest пишется с решёткой на конце — TMON@. Одна бумага может
@@ -155,18 +155,21 @@ def resolve_uid(token: str) -> tuple[str, str]:
     best = next((m for m in matches if m.get("classCode") == "TQTF"), matches[0])
     if len(matches) > 1:
         print(f"  выбран режим {best.get('classCode')}", file=sys.stderr)
-    return best["uid"], best.get("name", "")
+    return best
 
 
-def show_schedule(token: str, uid: str) -> None:
-    """Отвечает на открытый вопрос: торгуется ли TMON в утреннюю сессию."""
+def show_schedule(token: str, exchange: str = "MOEX", days: int = 7) -> None:
+    """Отвечает на открытый вопрос: торгуется ли TMON в утреннюю сессию.
+
+    Неделя вперёд, иначе на выходных виден только ответ «торгов нет».
+    """
     now = datetime.now(timezone.utc)
     resp = CALL("InstrumentsService/TradingSchedules",
-                {"exchange": "MOEX",
+                {"exchange": exchange,
                  "from": now.isoformat().replace("+00:00", "Z"),
-                 "to": (now + timedelta(days=1)).isoformat().replace("+00:00", "Z")}, token)
+                 "to": (now + timedelta(days=days)).isoformat().replace("+00:00", "Z")}, token)
     for exch in resp.get("exchanges", []):
-        for day in exch.get("days", [])[:2]:
+        for day in exch.get("days", []):
             if not day.get("isTradingDay"):
                 print(f"{day.get('date', '')[:10]}: торгов нет")
                 continue
@@ -292,11 +295,13 @@ def main() -> None:
 
     token = load_token()
 
-    uid, name = resolve_uid(token)
-    print(f"{TICKER} — {name}\ninstrument_uid: {uid}\n", file=sys.stderr)
+    inst = resolve_instrument(token)
+    uid, name = inst["uid"], inst.get("name", "")
+    exchange = inst.get("exchange") or "MOEX"
+    print(f"{TICKER} — {name}\ninstrument_uid: {uid}\nплощадка: {exchange}\n", file=sys.stderr)
 
     if args.cmd == "schedule":
-        show_schedule(token, uid)
+        show_schedule(token, exchange)
     elif args.cmd == "watch":
         run(token, uid, None, args.interval, watch=True)
     else:
