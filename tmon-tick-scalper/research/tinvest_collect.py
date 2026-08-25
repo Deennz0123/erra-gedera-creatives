@@ -255,6 +255,7 @@ def run(token: str, uid: str, out_path: str | None, interval: float, watch: bool
     fh = open(out_path, "a", buffering=1) if out_path else None
     state = PollState(since=datetime.now(timezone.utc) - timedelta(seconds=60))
     printed_header = False
+    empty_polls = 0
 
     while True:
         started = time.time()
@@ -271,11 +272,21 @@ def run(token: str, uid: str, out_path: str | None, interval: float, watch: bool
             for rec in records:
                 fh.write(json.dumps(rec) + "\n")
 
-        if watch and book:
-            if not printed_header:
-                print("  время    бид / оффер     спред  очередь бид/оффер   сделки за интервал")
-                printed_header = True
-            print(watch_line(book, fresh))
+        if watch:
+            if book:
+                empty_polls = 0
+                if not printed_header:
+                    print("  время    бид / оффер     спред  очередь бид/оффер   "
+                          "сделки за интервал")
+                    printed_header = True
+                print(watch_line(book, fresh))
+            else:
+                # Вне торговой сессии стакан пуст — молчать в этом случае нельзя,
+                # иначе запуск неотличим от зависшего.
+                if empty_polls % 12 == 0:
+                    print(f"{datetime.now(MSK):%H:%M:%S}  стакан пуст — торгов нет "
+                          f"или сессия закрыта")
+                empty_polls += 1
 
         time.sleep(max(0.0, interval - (time.time() - started)))
 
