@@ -260,13 +260,19 @@ def watch_line(book: dict, fresh: list[dict]) -> str:
 
 
 def run(token: str, uid: str, out_path: str | None, interval: float, watch: bool,
-        lot: int = 1) -> None:
+        lot: int = 1, minutes: float = 0.0) -> None:
+    """minutes = 0 — работать до остановки, иначе завершиться по таймеру.
+
+    Таймер нужен, чтобы запуск можно было прописать в сценарий и не держать
+    консоль открытой ради Ctrl+C.
+    """
     fh = open(out_path, "a", buffering=1) if out_path else None
     state = PollState(since=datetime.now(timezone.utc) - timedelta(seconds=60), lot=lot)
     printed_header = False
     empty_polls = 0
+    deadline = time.time() + minutes * 60 if minutes else None
 
-    while True:
+    while deadline is None or time.time() < deadline:
         started = time.time()
         try:
             book, fresh, records = step(token, uid, state)
@@ -299,6 +305,12 @@ def run(token: str, uid: str, out_path: str | None, interval: float, watch: bool
 
         time.sleep(max(0.0, interval - (time.time() - started)))
 
+    if fh:
+        fh.close()
+    if out_path:
+        rows = sum(1 for _ in open(out_path, encoding="utf-8"))
+        print(f"\nсбор завершён: {out_path}, записей {rows}", file=sys.stderr)
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
@@ -306,9 +318,13 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("schedule", help="расписание торгов TMON на сегодня и завтра")
     w = sub.add_parser("watch", help="печатать стакан и ленту вживую")
+    w.add_argument("--minutes", type=float, default=0,
+                   help="сколько работать; 0 — до остановки Ctrl+C")
     w.add_argument("--interval", type=float, default=5.0)
     c = sub.add_parser("collect", help="писать стакан и ленту в JSONL")
     c.add_argument("path")
+    c.add_argument("--minutes", type=float, default=0,
+                   help="сколько работать; 0 — до остановки Ctrl+C")
     c.add_argument("--interval", type=float, default=1.0)
     c.add_argument("--quiet", action="store_true")
     args = ap.parse_args()
@@ -326,9 +342,11 @@ def main() -> None:
     if args.cmd == "schedule":
         show_schedule(token, exchange)
     elif args.cmd == "watch":
-        run(token, uid, None, args.interval, watch=True, lot=lot)
+        run(token, uid, None, args.interval, watch=True, lot=lot,
+            minutes=args.minutes)
     else:
-        run(token, uid, args.path, args.interval, watch=not args.quiet, lot=lot)
+        run(token, uid, args.path, args.interval, watch=not args.quiet, lot=lot,
+            minutes=args.minutes)
 
 
 if __name__ == "__main__":
