@@ -1,19 +1,30 @@
 @echo off
-rem Zapusk vsego cikla dvoynym klikom: obnovlenie koda, sbor dannyh, analiz.
-rem Fayl nado polozhit' v papku tmon-tick-scalper i zapustit'.
-rem Rezul'tat - report.txt ryadom s etim faylom.
+rem Zapusk vsego cikla dvoynym klikom. Fayl sam nahodit papku proekta,
+rem poetomu ego mozhno ostavit' v Downloads i nikuda ne perekladyvat'.
+rem Rezul'tat - report.txt v papke proekta.
 
 chcp 65001 >nul
-cd /d "%~dp0"
+setlocal
 
-if not exist "research" (
+set PROJ=
+if exist "%~dp0research\tinvest_collect.py" set PROJ=%~dp0
+if not defined PROJ if exist "%~dp0tmon-tick-scalper\research\tinvest_collect.py" set PROJ=%~dp0tmon-tick-scalper\
+if not defined PROJ if exist "%USERPROFILE%\Downloads\tmon-tick-scalper\research\tinvest_collect.py" set PROJ=%USERPROFILE%\Downloads\tmon-tick-scalper\
+if not defined PROJ if exist "%USERPROFILE%\Desktop\tmon-tick-scalper\research\tinvest_collect.py" set PROJ=%USERPROFILE%\Desktop\tmon-tick-scalper\
+
+if not defined PROJ (
     echo.
-    echo ERROR: zapuskat' nado iz papki tmon-tick-scalper.
-    echo Polozhite run.bat ryadom s papkami research i tmon_bot.
+    echo ERROR: papka tmon-tick-scalper ne naydena.
+    echo Iskal ryadom s etim faylom, v Downloads i na Rabochem stole.
+    echo Polozhite run.bat v papku proekta i zapustite snova.
     echo.
     pause
     exit /b 1
 )
+
+cd /d "%PROJ%"
+echo Papka proekta: %PROJ%
+echo.
 
 set BASE=https://raw.githubusercontent.com/Deennz0123/erra-gedera-creatives/claude/tmon-tick-trading-automation-ur95a1/tmon-tick-scalper
 
@@ -29,11 +40,12 @@ if not exist "run.ps1" (
     exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0run.ps1" -Minutes 15
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PROJ%run.ps1" -Minutes 15
 
 echo.
-echo ================================================
-echo  Gotovo. Fayl report.txt lezhit v etoy zhe papke.
-echo ================================================
+echo ==========================================================
+echo  Gotovo. Fayl report.txt lezhit v papke:
+echo  %PROJ%
+echo ==========================================================
 echo.
 pause
