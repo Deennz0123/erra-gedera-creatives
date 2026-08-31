@@ -196,3 +196,21 @@ def test_ca_file_is_used_when_present(monkeypatch, tmp_path):
     with pytest.raises(SystemExit):
         tc.http_call("InstrumentsService/FindInstrument", {}, "t.x")
     assert seen["context"] == f"контекст с {ca}"
+
+
+# --- лоты против бумаг ------------------------------------------------------------
+
+def test_volumes_are_converted_from_lots_to_shares(monkeypatch):
+    """API отдаёт объём в лотах. Расхождение единиц исказило бы всю оценку очереди."""
+    monkeypatch.setattr(tc, "CALL", fake_api(trades=[
+        trade(30000000, "TRADE_DIRECTION_BUY", "7", "2026-08-24T10:00:00Z")]))
+    st = tc.PollState(since=datetime.now(timezone.utc) - timedelta(seconds=60), lot=10)
+    book, _, records = tc.step("t", "uid", st)
+    assert book["bid_qty"] == 412000 and book["ask_qty"] == 389000
+    assert [r["qty"] for r in records if r["t"] == "trade"] == [70]
+
+
+def test_lot_of_one_leaves_volumes_untouched(monkeypatch):
+    st = tc.PollState(since=datetime.now(timezone.utc) - timedelta(seconds=60))
+    book, _, _ = tc.step("t", "uid", st)
+    assert book["bid_qty"] == 41200

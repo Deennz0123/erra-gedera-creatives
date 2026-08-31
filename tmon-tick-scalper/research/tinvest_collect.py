@@ -184,8 +184,14 @@ def show_schedule(token: str, exchange: str = "MOEX", days: int = 7) -> None:
             print(f"  вечерняя:  {hhmm('eveningStartTime')} – {hhmm('eveningEndTime')}")
 
 
-def snapshot(token: str, uid: str, since: datetime) -> tuple[dict | None, list[dict], datetime]:
-    """Один опрос: верхушка стакана и сделки с прошлого раза."""
+def snapshot(token: str, uid: str, since: datetime,
+             lot: int = 1) -> tuple[dict | None, list[dict], datetime]:
+    """Один опрос: верхушка стакана и сделки с прошлого раза.
+
+    Объёмы в API выражены в лотах. Переводим их в бумаги прямо здесь, чтобы вся
+    остальная логика — размер слива, глубина очереди, симулятор — считала в одних
+    единицах. При лоте больше единицы иначе получилась бы кратная ошибка, и молча.
+    """
     now = datetime.now(timezone.utc)
     ob = CALL("MarketDataService/GetOrderBook", {"instrumentId": uid, "depth": 20}, token)
     tr = CALL("MarketDataService/GetLastTrades",
@@ -197,7 +203,8 @@ def snapshot(token: str, uid: str, since: datetime) -> tuple[dict | None, list[d
     book = None
     if bids and asks:
         book = {"bid": money(bids[0]["price"]), "ask": money(asks[0]["price"]),
-                "bid_qty": int(bids[0]["quantity"]), "ask_qty": int(asks[0]["quantity"]),
+                "bid_qty": int(bids[0]["quantity"]) * lot,
+                "ask_qty": int(asks[0]["quantity"]) * lot,
                 "bid_levels": len(bids), "ask_levels": len(asks)}
     return book, tr.get("trades", []), now
 
@@ -209,11 +216,12 @@ class PollState:
     since: datetime
     seen: set = field(default_factory=set)
     counter: int = 0
+    lot: int = 1
 
 
 def step(token: str, uid: str, st: PollState) -> tuple[dict | None, list[dict], list[dict]]:
     """Один опрос: возвращает стакан, новые сделки и готовые записи JSONL."""
-    book, trades, now = snapshot(token, uid, st.since)
+    book, trades, now = snapshot(token, uid, st.since, st.lot)
 
     fresh = []
     for t in trades:
@@ -233,7 +241,7 @@ def step(token: str, uid: str, st: PollState) -> tuple[dict | None, list[dict], 
         for t in fresh:
             st.counter += 1
             records.append({"t": "trade", "ts": now.timestamp(), "price": money(t.get("price")),
-                            "qty": int(t.get("quantity", 0)),
+                            "qty": int(t.get("quantity", 0)) * st.lot,
                             "side": "B" if t.get("direction", "").endswith("BUY") else "S",
                             "no": st.counter})
     return book, fresh, records
@@ -251,9 +259,10 @@ def watch_line(book: dict, fresh: list[dict]) -> str:
             f"  ({at_ask} по офферу, {at_bid} по биду)")
 
 
-def run(token: str, uid: str, out_path: str | None, interval: float, watch: bool) -> None:
+def run(token: str, uid: str, out_path: str | None, interval: float, watch: bool,
+        lot: int = 1) -> None:
     fh = open(out_path, "a", buffering=1) if out_path else None
-    state = PollState(since=datetime.now(timezone.utc) - timedelta(seconds=60))
+    state = PollState(since=datetime.now(timezone.utc) - timedelta(seconds=60), lot=lot)
     printed_header = False
     empty_polls = 0
 
@@ -309,14 +318,17 @@ def main() -> None:
     inst = resolve_instrument(token)
     uid, name = inst["uid"], inst.get("name", "")
     exchange = inst.get("exchange") or "MOEX"
-    print(f"{TICKER} — {name}\ninstrument_uid: {uid}\nплощадка: {exchange}\n", file=sys.stderr)
+    lot = int(inst.get("lot", 1) or 1)
+    print(f"{TICKER} — {name}\ninstrument_uid: {uid}\nплощадка: {exchange}\n"
+          f"лот: {lot} бумаг" + ("" if lot == 1 else "  ← объёмы пересчитываются в бумаги")
+          + "\n", file=sys.stderr)
 
     if args.cmd == "schedule":
         show_schedule(token, exchange)
     elif args.cmd == "watch":
-        run(token, uid, None, args.interval, watch=True)
+        run(token, uid, None, args.interval, watch=True, lot=lot)
     else:
-        run(token, uid, args.path, args.interval, watch=not args.quiet)
+        run(token, uid, args.path, args.interval, watch=not args.quiet, lot=lot)
 
 
 if __name__ == "__main__":
